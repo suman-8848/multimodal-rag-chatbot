@@ -16,7 +16,11 @@ EXAMPLES = [
     "How should secondary risers be attached relative to the transformer?",
 ]
 
-pipeline = RagPipeline()
+# Hardcoded rather than left to RAG_LLM_BACKEND's default: this file is
+# specifically the deployed-app entry point, and should always run the
+# ZeroGPU backend regardless of Space env var configuration. Use rag/cli.py
+# for local development against Ollama instead.
+pipeline = RagPipeline(llm_backend="zerogpu")
 
 
 def _section_label(section: str, subsection: str) -> str:

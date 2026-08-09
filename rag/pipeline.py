@@ -97,31 +97,35 @@ def _pooled(output):
     return output.pooler_output if hasattr(output, "pooler_output") else output
 
 
-_zerogpu_pipeline = None
+# HF's ZeroGPU docs are explicit that the model must be moved to 'cuda' at
+# true module level, not lazily inside (or lazily triggered from within) the
+# @spaces.GPU-decorated function — a CUDA emulation layer makes '.to(cuda)'
+# work here without a real GPU physically attached yet, but only follows this
+# exact shape. Lazy-loading inside the decorated call instead produced
+# "RuntimeError: No CUDA GPUs are available" when actually deployed. Only
+# triggers (and only downloads the model) when the `spaces` package is
+# installed, i.e. in a real ZeroGPU deployment or when deliberately testing
+# this backend locally.
+if _HAS_SPACES:
+    from transformers import pipeline as hf_pipeline
 
-
-def _get_zerogpu_pipeline():
-    """Lazily load+cache the local generation model, placed on 'cuda' outside
-    the @spaces.GPU-decorated call as HF's docs recommend (a CUDA emulation
-    layer makes that work even without a real GPU attached yet)."""
-    global _zerogpu_pipeline
-    if _zerogpu_pipeline is None:
-        from transformers import pipeline as hf_pipeline
-
-        device = "cuda" if (_HAS_SPACES or torch.cuda.is_available()) else "cpu"
-        _zerogpu_pipeline = hf_pipeline(
-            "text-generation", model=ZEROGPU_MODEL_NAME, device=device, torch_dtype="auto"
-        )
-    return _zerogpu_pipeline
+    _zerogpu_pipeline = hf_pipeline(
+        "text-generation", model=ZEROGPU_MODEL_NAME, device="cuda", torch_dtype="auto"
+    )
+else:
+    _zerogpu_pipeline = None
 
 
 def _zerogpu_generate_impl(system_prompt: str, user_prompt: str) -> str:
-    pipe = _get_zerogpu_pipeline()
+    if _zerogpu_pipeline is None:
+        raise RuntimeError(
+            "llm_backend='zerogpu' requires the `spaces` package (pip install spaces)"
+        )
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
-    output = pipe(messages, max_new_tokens=512, do_sample=False)
+    output = _zerogpu_pipeline(messages, max_new_tokens=512, do_sample=False)
     return output[0]["generated_text"][-1]["content"]
 
 

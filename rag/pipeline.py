@@ -102,54 +102,39 @@ def _pooled(output):
     return output.pooler_output if hasattr(output, "pooler_output") else output
 
 
-# HF's ZeroGPU docs are explicit that the model must be moved to 'cuda' at
-# true module level, not lazily inside (or lazily triggered from within) the
-# @spaces.GPU-decorated function — a CUDA emulation layer makes '.to(cuda)'
-# work here without a real GPU physically attached yet, but only follows this
-# exact shape. Lazy-loading inside the decorated call instead produced
-# "RuntimeError: No CUDA GPUs are available" when actually deployed.
-#
-# Also uses an explicit AutoModelForCausalLM + .to("cuda") call rather than
-# the high-level transformers.pipeline(..., device="cuda") factory: the
-# latter still failed with the same error, which points at `spaces`'s
-# patching intercepting the specific `.to("cuda")` method call (as shown in
-# HF's own ZeroGPU example: `pipe.to("cuda")`) rather than whatever internal
-# device-placement path `pipeline()` uses.
-#
-# Only triggers (and only downloads the model) when the `spaces` package is
-# installed, i.e. in a real ZeroGPU deployment or when deliberately testing
-# this backend locally.
-if _HAS_SPACES:
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-
-    _zerogpu_tokenizer = AutoTokenizer.from_pretrained(ZEROGPU_MODEL_NAME)
-    _zerogpu_model = AutoModelForCausalLM.from_pretrained(ZEROGPU_MODEL_NAME, torch_dtype="auto")
-    _zerogpu_model.to("cuda")
-else:
-    _zerogpu_tokenizer = None
-    _zerogpu_model = None
+# Runs on CPU deliberately, without @spaces.GPU dispatch. ZeroGPU's actual
+# GPU worker allocation proved unreliable when deployed (consistently
+# "RuntimeError: No CUDA GPUs are available" deep inside spaces' own worker
+# init, even after loading at true module scope with an explicit .to("cuda")
+# call and fixing spaces/torch import order — all documented fixes for that
+# error). The Space's hardware tier is still set to ZeroGPU, since that's
+# what makes free personal-account Gradio hosting possible at all right now,
+# but generation itself just runs on whatever CPU that container provides.
+# Small enough (3B) to be tolerable there. See README known limitations.
+_ZEROGPU_LAZY = {}
 
 
-def _zerogpu_generate_impl(system_prompt: str, user_prompt: str) -> str:
-    if _zerogpu_model is None:
-        raise RuntimeError(
-            "llm_backend='zerogpu' requires the `spaces` package (pip install spaces)"
+def _get_zerogpu_model():
+    if not _ZEROGPU_LAZY:
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        _ZEROGPU_LAZY["tokenizer"] = AutoTokenizer.from_pretrained(ZEROGPU_MODEL_NAME)
+        _ZEROGPU_LAZY["model"] = AutoModelForCausalLM.from_pretrained(
+            ZEROGPU_MODEL_NAME, torch_dtype="auto"
         )
+    return _ZEROGPU_LAZY["tokenizer"], _ZEROGPU_LAZY["model"]
+
+
+def _zerogpu_generate(system_prompt: str, user_prompt: str) -> str:
+    tokenizer, model = _get_zerogpu_model()
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
-    input_ids = _zerogpu_tokenizer.apply_chat_template(
-        messages, add_generation_prompt=True, return_tensors="pt"
-    ).to(_zerogpu_model.device)
-    output_ids = _zerogpu_model.generate(input_ids, max_new_tokens=512, do_sample=False)
-    new_tokens = output_ids[0][input_ids.shape[-1] :].cpu()
-    return _zerogpu_tokenizer.decode(new_tokens, skip_special_tokens=True)
-
-
-# @spaces.GPU is a documented no-op outside a real ZeroGPU Space, so this is
-# safe to wrap unconditionally whenever the `spaces` package is installed.
-_zerogpu_generate = spaces.GPU(_zerogpu_generate_impl) if _HAS_SPACES else _zerogpu_generate_impl
+    input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
+    output_ids = model.generate(input_ids, max_new_tokens=512, do_sample=False)
+    new_tokens = output_ids[0][input_ids.shape[-1] :]
+    return tokenizer.decode(new_tokens, skip_special_tokens=True)
 
 
 class RagPipeline:

@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+
+# data/chroma_db/ is intentionally NOT ignored: the prebuilt index ships in
+# the repo so the deployed Space (and anyone cloning the repo) doesn't need
+# to re-run ingestion. Delete this file and re-run ingest/build_index.py to
+# force a rebuild.

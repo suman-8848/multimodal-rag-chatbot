@@ -5,6 +5,12 @@ in retrieved text chunks and images from the Phase 1 ChromaDB index, with the
 source images and their section citations rendered inline below the answer.
 """
 
+# Must be the first import in the process — see rag/pipeline.py for why.
+try:
+    import spaces  # noqa: F401
+except ImportError:
+    pass
+
 import gradio as gr
 
 from rag.pipeline import ROOT, RagPipeline

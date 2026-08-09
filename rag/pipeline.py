@@ -15,6 +15,18 @@ using one of two interchangeable LLM backends (see RAG_LLM_BACKEND below):
   free HF account, shared across all visitors. See README for details.
 """
 
+# `spaces` must be imported before torch (directly or transitively via
+# chromadb/sentence_transformers/transformers/ollama) — HF's ZeroGPU CUDA
+# patching only takes effect if it initializes first. Importing it later
+# produced "RuntimeError: No CUDA GPUs are available" deep inside spaces'
+# own worker init on the deployed Space, even with correctly-decorated code.
+try:
+    import spaces
+
+    _HAS_SPACES = True
+except ImportError:
+    _HAS_SPACES = False
+
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,13 +36,6 @@ import ollama
 import torch
 from sentence_transformers import SentenceTransformer
 from transformers import CLIPModel, CLIPProcessor
-
-try:
-    import spaces
-
-    _HAS_SPACES = True
-except ImportError:
-    _HAS_SPACES = False
 
 ROOT = Path(__file__).resolve().parent.parent
 CHROMA_DIR = ROOT / "data" / "chroma_db"

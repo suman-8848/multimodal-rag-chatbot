@@ -9,7 +9,7 @@ app_file: app/app.py
 python_version: "3.12"
 pinned: false
 license: mit
-short_description: Multimodal RAG chatbot with text+image retrieval and grounded, cited answers.
+short_description: Multimodal RAG chatbot with text and image retrieval
 ---
 
 # Multimodal RAG Chatbot

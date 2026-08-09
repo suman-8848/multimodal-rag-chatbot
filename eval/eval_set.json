@@ -1,0 +1,112 @@
+[
+  {
+    "id": "q01",
+    "question": "What should I verify about violations before finalizing the CL?",
+    "expected_sections": ["CHECKLIST"],
+    "expected_image_ids": [],
+    "expected_answer_summary": "Make sure violations correlate to the correct pole on the CL, that scids with an 'Existing clearance violations' entry have appropriate directives in Communication MR, and remove 'Easement'/'Roadside'/'up:'/'down' from the CL."
+  },
+  {
+    "id": "q02",
+    "question": "When is a PLA not required for a route?",
+    "expected_sections": ["PACKAGE"],
+    "expected_image_ids": [],
+    "expected_answer_summary": "No PLA is needed if all poles on the route are denied as 'At Cap' or 'DNC'."
+  },
+  {
+    "id": "q03",
+    "question": "What does it mean when a pole is 'captured for engineering purposes' on the ExhibitA?",
+    "expected_sections": ["ExhibitA"],
+    "expected_image_ids": [],
+    "expected_answer_summary": "Usually on Mixed jobs, it means an OL pole was captured solely to fix violations on the adjacent EJU pole (or to resolve OL-only violations); don't charge it if the OL pole wasn't needed."
+  },
+  {
+    "id": "q04",
+    "question": "What project comment should be added if the customer cancels the proposal?",
+    "expected_sections": ["SPANS COMMENTS"],
+    "expected_subsections": ["No Contact ExA Project Comments:"],
+    "expected_image_ids": [],
+    "expected_answer_summary": "\"Cancelled per customer's request.\""
+  },
+  {
+    "id": "q05",
+    "question": "What note should I add when poles were not captured for engineering purposes?",
+    "expected_sections": ["SPANS COMMENTS"],
+    "expected_subsections": ["Additional Project Comments that may be needed"],
+    "expected_image_ids": [],
+    "expected_answer_summary": "'[N] poles were not captured for engineering purposes (pole #, pole #)'."
+  },
+  {
+    "id": "q06",
+    "question": "On a clean pole with a span length of about 220 feet, what height should the comm attach at?",
+    "expected_sections": ["COMMON MR NOTES & VIOLATIONS"],
+    "expected_subsections": ["Comm Attachment on Clean Poles"],
+    "expected_image_ids": [],
+    "expected_answer_summary": "21'-22\" (the 200-250' span row of the clean-pole attachment height table)."
+  },
+  {
+    "id": "q07",
+    "question": "What's the maximum grading allowed for power spans longer than 300 feet?",
+    "expected_sections": ["COMMON MR NOTES & VIOLATIONS"],
+    "expected_subsections": ["Grading"],
+    "expected_image_ids": [],
+    "expected_answer_summary": "Max of 5 feet."
+  },
+  {
+    "id": "q08",
+    "question": "Can you show an example of noting the attachment height for a new strand?",
+    "expected_sections": ["MAKE READY"],
+    "expected_image_ids": ["img_001"],
+    "expected_answer_summary": "Screenshot example: 'Lower: Zayo - 1'-4\" to 18'-0\"; ... FTR to install and lash new strand to drop @ 17'-7\" or remove drop from Duke to Duke pole.'"
+  },
+  {
+    "id": "q09",
+    "question": "Show an example of when to replace a triplex with a transformer.",
+    "expected_sections": ["POWER MAKE READY"],
+    "expected_image_ids": ["img_003", "img_004"],
+    "expected_answer_summary": "Job 2402FRO0001DEI: resolving a midspan clearance violation by removing secondary line between poles 579-444 and 579-447, installing a transformer on 579-445."
+  },
+  {
+    "id": "q10",
+    "question": "When does a secondary line going into the comm zone require a service request?",
+    "expected_sections": ["SERVICE REQUESTS"],
+    "expected_image_ids": ["img_005"],
+    "expected_answer_summary": "Secondary going down a pole, into the comm zone, to feed a house/meter with existing comms gets a SR."
+  },
+  {
+    "id": "q11",
+    "question": "What should be done about a pole with a pool clearance violation?",
+    "expected_sections": ["SERVICE REQUESTS", "MAKE READY"],
+    "expected_image_ids": ["img_002", "img_006"],
+    "expected_answer_summary": "Create a SR for the secondary and deny the pole as At Capacity for new attachments; the existing comm can't be removed, so let the district decide what to do with it. (Note: this example, job 2502MWI0691DEI, is stated twice in the source doc, once summarized near the end of MAKE READY and again under SERVICE REQUESTS.)"
+  },
+  {
+    "id": "q12",
+    "question": "When should I NOT create a service request?",
+    "expected_sections": ["SERVICE REQUESTS"],
+    "expected_image_ids": ["img_008"],
+    "expected_answer_summary": "No SR for a pole that's abandoned (secondary/riser previously in use but not currently) unless it's 100% not in use -- check Argus, then deny contact."
+  },
+  {
+    "id": "q13",
+    "question": "Give me some example MR notes for comm attachments.",
+    "expected_sections": ["COMMON MR NOTES & VIOLATIONS"],
+    "expected_image_ids": ["img_009"],
+    "expected_answer_summary": "E.g. 'Comm to resag up {direction} drop to meet clearance', 'Comm to properly tension cable', 'Comm to lash drop to strand', etc."
+  },
+  {
+    "id": "q14",
+    "question": "What does a comm tag look like on a pole?",
+    "expected_sections": ["COMM TAGS:"],
+    "expected_image_ids": ["img_011", "img_012"],
+    "expected_answer_summary": "Photos of comm tags under the COMM TAGS section (no surrounding descriptive text in the source doc -- purely visual)."
+  },
+  {
+    "id": "q15",
+    "question": "Is there a diagram for comm attachment based on line angle?",
+    "expected_sections": ["COMMON MR NOTES & VIOLATIONS"],
+    "expected_subsections": ["Comm Attachment based on line angle"],
+    "expected_image_ids": ["img_010"],
+    "expected_answer_summary": "Diagram under 'Comm Attachment based on line angle' (no surrounding descriptive text in the source doc -- purely visual)."
+  }
+]

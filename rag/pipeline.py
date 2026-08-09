@@ -102,22 +102,31 @@ def _pooled(output):
 # @spaces.GPU-decorated function — a CUDA emulation layer makes '.to(cuda)'
 # work here without a real GPU physically attached yet, but only follows this
 # exact shape. Lazy-loading inside the decorated call instead produced
-# "RuntimeError: No CUDA GPUs are available" when actually deployed. Only
-# triggers (and only downloads the model) when the `spaces` package is
+# "RuntimeError: No CUDA GPUs are available" when actually deployed.
+#
+# Also uses an explicit AutoModelForCausalLM + .to("cuda") call rather than
+# the high-level transformers.pipeline(..., device="cuda") factory: the
+# latter still failed with the same error, which points at `spaces`'s
+# patching intercepting the specific `.to("cuda")` method call (as shown in
+# HF's own ZeroGPU example: `pipe.to("cuda")`) rather than whatever internal
+# device-placement path `pipeline()` uses.
+#
+# Only triggers (and only downloads the model) when the `spaces` package is
 # installed, i.e. in a real ZeroGPU deployment or when deliberately testing
 # this backend locally.
 if _HAS_SPACES:
-    from transformers import pipeline as hf_pipeline
+    from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    _zerogpu_pipeline = hf_pipeline(
-        "text-generation", model=ZEROGPU_MODEL_NAME, device="cuda", torch_dtype="auto"
-    )
+    _zerogpu_tokenizer = AutoTokenizer.from_pretrained(ZEROGPU_MODEL_NAME)
+    _zerogpu_model = AutoModelForCausalLM.from_pretrained(ZEROGPU_MODEL_NAME, torch_dtype="auto")
+    _zerogpu_model.to("cuda")
 else:
-    _zerogpu_pipeline = None
+    _zerogpu_tokenizer = None
+    _zerogpu_model = None
 
 
 def _zerogpu_generate_impl(system_prompt: str, user_prompt: str) -> str:
-    if _zerogpu_pipeline is None:
+    if _zerogpu_model is None:
         raise RuntimeError(
             "llm_backend='zerogpu' requires the `spaces` package (pip install spaces)"
         )
@@ -125,8 +134,12 @@ def _zerogpu_generate_impl(system_prompt: str, user_prompt: str) -> str:
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
-    output = _zerogpu_pipeline(messages, max_new_tokens=512, do_sample=False)
-    return output[0]["generated_text"][-1]["content"]
+    input_ids = _zerogpu_tokenizer.apply_chat_template(
+        messages, add_generation_prompt=True, return_tensors="pt"
+    ).to(_zerogpu_model.device)
+    output_ids = _zerogpu_model.generate(input_ids, max_new_tokens=512, do_sample=False)
+    new_tokens = output_ids[0][input_ids.shape[-1] :].cpu()
+    return _zerogpu_tokenizer.decode(new_tokens, skip_special_tokens=True)
 
 
 # @spaces.GPU is a documented no-op outside a real ZeroGPU Space, so this is

@@ -144,9 +144,11 @@ def _zerogpu_generate(system_prompt: str, user_prompt: str) -> str:
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
-    input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
-    output_ids = model.generate(input_ids, max_new_tokens=512, do_sample=False)
-    new_tokens = output_ids[0][input_ids.shape[-1] :]
+    inputs = tokenizer.apply_chat_template(
+        messages, add_generation_prompt=True, return_tensors="pt", return_dict=True
+    )
+    output_ids = model.generate(**inputs, max_new_tokens=512, do_sample=False)
+    new_tokens = output_ids[0][inputs["input_ids"].shape[-1] :]
     return tokenizer.decode(new_tokens, skip_special_tokens=True)
 
 

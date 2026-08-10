@@ -25,6 +25,9 @@ access-restricted, since the source document contains real internal company refe
 (see [Known limitations](#known-limitations)); happy to grant access on request. The code,
 architecture, and evaluation below stand on their own regardless.
 
+New to RAG/embeddings/vector search? **[docs/EXPLAINED.md](docs/EXPLAINED.md)** walks
+through the whole thing in plain language, no background assumed.
+
 No paid API keys anywhere — every model (embeddings and generation) is open-weight.
 
 ## Architecture

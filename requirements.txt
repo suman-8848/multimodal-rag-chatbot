@@ -1,3 +1,4 @@
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 python-docx==1.2.0
 PyMuPDF==1.28.2
 Pillow==12.3.0

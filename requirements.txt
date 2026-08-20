@@ -1,4 +1,5 @@
 python-docx==1.2.0
+PyMuPDF==1.28.2
 Pillow==12.3.0
 sentence-transformers==5.7.0
 transformers==5.14.1
@@ -6,5 +7,6 @@ torch==2.11.0
 langchain-text-splitters==1.1.2
 chromadb==1.5.9
 ollama==0.6.2
+llama-cpp-python==0.3.35
 gradio==6.22.0
 spaces==0.51.1

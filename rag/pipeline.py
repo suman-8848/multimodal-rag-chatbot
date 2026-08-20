@@ -1,4 +1,4 @@
-"""Retrieval-augmented generation over the MR Tips & Tricks ChromaDB index.
+"""Retrieval-augmented generation over the utility make-ready reference-doc ChromaDB index.
 
 Retrieves relevant text chunks (MiniLM) and images (CLIP, queried via its text
 encoder into the same embedding space as the indexed images) from the
@@ -7,12 +7,16 @@ using one of two interchangeable LLM backends (see RAG_LLM_BACKEND below):
 
 - "ollama"  — a local Ollama server. Used for local development.
 - "zerogpu" — a small open model (Qwen2.5-3B-Instruct) run in-process via
-  transformers, GPU-accelerated for free on HF Spaces' ZeroGPU when deployed
-  there (falls back to CPU when run elsewhere, e.g. local testing). Chosen
-  over Ollama-on-CPU (too slow on Spaces' free 2 vCPU hardware) and over HF's
-  paid Inference Providers API (free tier is a thin $0.10/month credit) —
-  ZeroGPU is genuinely free, just capped at 5 minutes/day of GPU time on a
-  free HF account, shared across all visitors. See README for details.
+  llama.cpp (llama-cpp-python), on HF Spaces' free CPU tier (ZeroGPU's actual
+  GPU dispatch doesn't work on this account/fleet — see below — so this always
+  runs on CPU regardless of the "zerogpu" name, kept for its hardware-tier
+  meaning on Spaces). A quantized GGUF build is used specifically *because*
+  it's CPU-only: llama.cpp's CPU kernels are dramatically faster than eager
+  PyTorch generation for token-by-token decoding, which matters a lot on
+  Spaces' free 2 vCPU hardware. Chosen over Ollama-on-CPU (same speed problem,
+  plus no Ollama server available on Spaces) and over HF's paid Inference
+  Providers API (free tier is a thin $0.10/month credit) — this stays
+  genuinely free. See README for details.
 """
 
 # `spaces` must be imported before torch (directly or transitively via
@@ -53,21 +57,38 @@ IMAGE_COLLECTION = "image_chunks"
 # than answer quality. Only used by the "ollama" backend.
 OLLAMA_MODEL = "llama3"
 
-# Ungated (Apache-2.0) so it downloads with no license click-through or
-# HF_TOKEN needed — small enough to be fast on ZeroGPU's shared hardware.
-# Only used by the "zerogpu" backend.
-ZEROGPU_MODEL_NAME = "Qwen/Qwen2.5-3B-Instruct"
+# Ungated (Apache-2.0), official Qwen-published GGUF quantization — no license
+# click-through or HF_TOKEN needed. Q4_K_M is the standard "good quality, real
+# speedup" quantization level (~2GB vs. ~6GB for the fp16 weights). Only used
+# by the "zerogpu" backend.
+ZEROGPU_GGUF_REPO = "Qwen/Qwen2.5-3B-Instruct-GGUF"
+ZEROGPU_GGUF_FILENAME = "qwen2.5-3b-instruct-q4_k_m.gguf"
+ZEROGPU_CONTEXT_TOKENS = 4096
 
 DEFAULT_LLM_BACKEND = os.environ.get("RAG_LLM_BACKEND", "ollama")
 
 TOP_K_TEXT = 4
 TOP_K_IMAGES = 2
 
+# Image "descriptions" for PDF pages are the page's full extracted text (up to ~2,400
+# chars for the NESC charts) — useful to store for embedding/context, but dumping all of
+# it into the LLM prompt duplicates what text retrieval already surfaced and slows CPU
+# generation on the deployed Space for no accuracy benefit. Capped here, at prompt-build
+# time, so the full description is still stored/embeddable in Chroma.
+IMAGE_DESCRIPTION_PROMPT_CHARS = 400
+
+# Kept modest deliberately: generation runs on CPU on the deployed Space (see below), and
+# grounded answers to these reference-doc questions don't need much room. Shorter cap
+# also nudges the model toward direct answers instead of padding/rambling.
+MAX_NEW_TOKENS = 300
+
 SYSTEM_PROMPT = (
-    "You are an assistant answering questions about a utility pole make-ready "
-    "reference document (MR Tips & Tricks). Answer ONLY using the provided "
+    "You are an assistant answering questions about utility make-ready reference "
+    "documents, covering make-ready standard operating procedures, service request "
+    "procedures, and NESC clearance requirements. Answer ONLY using the provided "
     "context. If the context doesn't contain the answer, say you don't know "
-    "rather than guessing."
+    "rather than guessing. Be concise and direct — a few sentences unless the "
+    "question genuinely requires more."
 )
 
 
@@ -77,6 +98,7 @@ class TextSource:
     section: str
     subsection: str
     distance: float
+    source_doc: str = ""
 
 
 @dataclass
@@ -86,6 +108,7 @@ class ImageSource:
     section: str
     subsection: str
     distance: float
+    source_doc: str = ""
 
 
 @dataclass
@@ -127,29 +150,31 @@ if _HAS_SPACES:
 _ZEROGPU_LAZY = {}
 
 
-def _get_zerogpu_model():
+def _get_zerogpu_llm():
     if not _ZEROGPU_LAZY:
-        from transformers import AutoModelForCausalLM, AutoTokenizer
+        from llama_cpp import Llama
 
-        _ZEROGPU_LAZY["tokenizer"] = AutoTokenizer.from_pretrained(ZEROGPU_MODEL_NAME)
-        _ZEROGPU_LAZY["model"] = AutoModelForCausalLM.from_pretrained(
-            ZEROGPU_MODEL_NAME, torch_dtype="auto"
+        _ZEROGPU_LAZY["llm"] = Llama.from_pretrained(
+            repo_id=ZEROGPU_GGUF_REPO,
+            filename=ZEROGPU_GGUF_FILENAME,
+            n_ctx=ZEROGPU_CONTEXT_TOKENS,
+            n_threads=os.cpu_count(),
+            verbose=False,
         )
-    return _ZEROGPU_LAZY["tokenizer"], _ZEROGPU_LAZY["model"]
+    return _ZEROGPU_LAZY["llm"]
 
 
 def _zerogpu_generate(system_prompt: str, user_prompt: str) -> str:
-    tokenizer, model = _get_zerogpu_model()
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt},
-    ]
-    inputs = tokenizer.apply_chat_template(
-        messages, add_generation_prompt=True, return_tensors="pt", return_dict=True
+    llm = _get_zerogpu_llm()
+    response = llm.create_chat_completion(
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        max_tokens=MAX_NEW_TOKENS,
+        temperature=0.0,
     )
-    output_ids = model.generate(**inputs, max_new_tokens=512, do_sample=False)
-    new_tokens = output_ids[0][inputs["input_ids"].shape[-1] :]
-    return tokenizer.decode(new_tokens, skip_special_tokens=True)
+    return response["choices"][0]["message"]["content"].strip()
 
 
 class RagPipeline:
@@ -203,6 +228,7 @@ class RagPipeline:
                 section=meta.get("section", ""),
                 subsection=meta.get("subsection", ""),
                 distance=dist,
+                source_doc=meta.get("source_doc", ""),
             )
             for doc, meta, dist in zip(
                 text_results["documents"][0],
@@ -222,6 +248,7 @@ class RagPipeline:
                 section=meta.get("section", ""),
                 subsection=meta.get("subsection", ""),
                 distance=dist,
+                source_doc=meta.get("source_doc", ""),
             )
             for doc, meta, dist in zip(
                 image_results["documents"][0],
@@ -234,11 +261,16 @@ class RagPipeline:
     def _build_prompt(self, query: str, text_sources, image_sources) -> str:
         blocks = []
         for i, src in enumerate(text_sources, 1):
-            header = " > ".join(b for b in (src.section, src.subsection) if b)
+            section_label = " > ".join(b for b in (src.section, src.subsection) if b)
+            header = " | ".join(b for b in (src.source_doc, section_label) if b)
             blocks.append(f"[Text {i} | {header}]\n{src.text}")
         for i, src in enumerate(image_sources, 1):
-            header = " > ".join(b for b in (src.section, src.subsection) if b)
-            blocks.append(f"[Image {i} | {header} | file: {src.image_path}]\n{src.description}")
+            section_label = " > ".join(b for b in (src.section, src.subsection) if b)
+            header = " | ".join(b for b in (src.source_doc, section_label) if b)
+            description = src.description
+            if len(description) > IMAGE_DESCRIPTION_PROMPT_CHARS:
+                description = description[:IMAGE_DESCRIPTION_PROMPT_CHARS].rstrip() + "..."
+            blocks.append(f"[Image {i} | {header} | file: {src.image_path}]\n{description}")
         context = "\n\n".join(blocks) if blocks else "(no relevant context found)"
         return f"Context:\n{context}\n\nQuestion: {query}\n\nAnswer:"
 

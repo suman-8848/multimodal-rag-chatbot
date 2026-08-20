@@ -1,8 +1,8 @@
-"""Gradio chat UI for the MR Tips & Tricks multimodal RAG chatbot.
+"""Gradio chat UI for the utility make-ready multimodal RAG chatbot.
 
 Wraps rag.pipeline.RagPipeline in a gr.ChatInterface: each answer is grounded
-in retrieved text chunks and images from the Phase 1 ChromaDB index, with the
-source images and their section citations rendered inline below the answer.
+in retrieved text chunks and images from the ChromaDB index, with the
+source images and their document/section citations rendered inline below the answer.
 """
 
 # Must be the first import in the process — see rag/pipeline.py for why.
@@ -17,9 +17,9 @@ from rag.pipeline import ROOT, RagPipeline
 
 EXAMPLES = [
     "What should I do if a pole is failing sound and probe?",
-    "What is the rule for attaching comms on a clean pole with no existing attachers?",
-    "What are the rules about drops attached without a cable?",
-    "How should secondary risers be attached relative to the transformer?",
+    "How do we create a service request?",
+    "What is the required vertical clearance over a swimming pool?",
+    "What is the ground clearance for a 120/240V triplex service drop?",
 ]
 
 # Hardcoded rather than left to RAG_LLM_BACKEND's default: this file is
@@ -29,8 +29,10 @@ EXAMPLES = [
 pipeline = RagPipeline(llm_backend="zerogpu")
 
 
-def _section_label(section: str, subsection: str) -> str:
-    return " > ".join(b for b in (section, subsection) if b) or "Unknown section"
+def _section_label(source_doc: str, section: str, subsection: str) -> str:
+    section_part = " > ".join(b for b in (section, subsection) if b)
+    label = " | ".join(b for b in (source_doc, section_part) if b)
+    return label or "Unknown section"
 
 
 def respond(message: str, history: list) -> str:
@@ -41,12 +43,12 @@ def respond(message: str, history: list) -> str:
         parts.append("\n---\n**Source images:**")
         for src in result.image_sources:
             image_url = f"/gradio_api/file={(ROOT / src.image_path).as_posix()}"
-            parts.append(f"\n*{_section_label(src.section, src.subsection)}*\n\n![source]({image_url})")
+            parts.append(f"\n*{_section_label(src.source_doc, src.section, src.subsection)}*\n\n![source]({image_url})")
 
     if result.text_sources:
         seen = []
         for src in result.text_sources:
-            label = _section_label(src.section, src.subsection)
+            label = _section_label(src.source_doc, src.section, src.subsection)
             if label not in seen:
                 seen.append(label)
         parts.append("\n\n**Referenced sections:** " + "; ".join(seen))
@@ -56,10 +58,11 @@ def respond(message: str, history: list) -> str:
 
 demo = gr.ChatInterface(
     fn=respond,
-    title="MR Tips & Tricks Q&A",
+    title="Make-Ready Reference Q&A",
     description=(
-        "Ask about utility pole make-ready rules. Answers are grounded in the source "
-        "document, with relevant field photos and section citations shown below each answer."
+        "Ask about make-ready procedures, service requests, or NESC clearance rules. Answers "
+        "are grounded in the source documents, with relevant photos/charts and citations shown "
+        "below each answer."
     ),
     examples=EXAMPLES,
 )
